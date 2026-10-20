@@ -1,5 +1,5 @@
 // Import des activités Garmin via intervals.icu (clé API personnelle)
-import { keyOk, json } from "../lib/lib.mjs";
+import { keyOk, json, wellness, answers, shiftDay } from "../lib/lib.mjs";
 const API = "https://intervals.icu/api/v1";
 const RUN = new Set(["Run", "TrailRun", "VirtualRun"]);
 export default async (req) => {
@@ -37,7 +37,8 @@ export default async (req) => {
       }
       out.push(o);
     }
-    return json({ athlete: "Garmin", activities: out });
+    const [ws, ans] = await Promise.all([wellness(shiftDay(newest, -21), newest), answers()]);
+    return json({ athlete: "Garmin", activities: out, wellness: ws, answers: ans });
   } catch (e) {
     return json({ error: e.message }, 502);
   }

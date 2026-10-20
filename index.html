@@ -214,7 +214,15 @@ const VDOT_PLAN=[['2026-10-20',45.6],['2027-02-07',46.2],['2027-03-07',46.5],['2
 function interp(pts,d){const t=d.getTime();if(t<=D(pts[0][0]).getTime())return pts[0][1];for(let i=1;i<pts.length;i++){const a=D(pts[i-1][0]).getTime(),b=D(pts[i][0]).getTime();if(t<=b)return pts[i-1][1]+(pts[i][1]-pts[i-1][1])*(t-a)/(b-a);}return pts[pts.length-1][1];}
 function runTests(){return BASE_RUNS.concat(ST.runTests||[],logTests()).map(r=>Object.assign({v:r.thr?vdotThr(r.thr):vdotOf(r.dist,r.sec)},r)).sort((a,b)=>a.d<b.d?-1:a.d>b.d?1:0);}
 function measuredVdot(){const t=runTests();return t[t.length-1].v;}
-function usedVdot(d){return Math.min(interp(VDOT_PLAN,d),measuredVdot()+1);}
+function sessionVdot(d){
+ // VDOT implicite des séances de qualité réalisées (6 dernières semaines), via le rapport allure prévue / réalisée
+ const k=key(d),lo=key(add(d,-42)),v=[];
+ Object.values(ST.log||{}).forEach(l=>{if(l.sp!=='run'||!(l.k==='seuil'||l.k==='vma')||!l.vd||!l.plan||!l.val||l.d>=k||l.d<lo)return;
+  const r=l.plan/l.val;if(r<0.8||r>1.25)return;v.push(l.vd*r);});
+ if(v.length<3)return null;v.sort((a,b)=>a-b);return v[Math.floor(v.length/2)];}
+function baseVdot(d){return Math.min(interp(VDOT_PLAN,d),measuredVdot()+1);}
+function usedVdot(d){const b=baseVdot(d),sv=sessionVdot(d);if(sv==null)return b;
+ if(sv>b+0.3)return Math.min(sv-0.2,b+1.5);if(sv<b-0.5)return Math.max(sv+0.2,b-1.5);return b;}
 
 // ---------- Natation : CSS ----------
 const BASE_SWIM={d:'2026-10-20',css:112,label:'Estimation à partir de Strava'};
@@ -603,10 +611,10 @@ function sesHtml(s,d,i){
  return `<div class="ses ${s.sp}${done?' done':''}">${ck}<div class="sb"><div class="sh"><span class="tg">${SPN[s.sp]}</span>${meta?`<span>${meta}</span>`:''}</div><div class="st">${esc(s.t)}</div>${extra}<div class="sx">${fill(s.x,d)}</div>${spdHtml(s,d,id)}${sesKind(s)&&((s.min||0)>=60||s.sp==='race'||(s.m||0)>=2500)?`<button class="lnk" data-act="ncses" data-id="${id}">Calculer la nutrition de cette séance →</button>`:''}</div></div>`;
 }
 function dayHtml(d,title,rt){
- const p=PLAN[key(d)],isT=key(d)===key(today());
+ const p=PLAN[key(d)],isT=key(d)===key(today()),wxs=rt&&diff(today(),d)>=0&&diff(today(),d)<=2;
  if(!p)return `<div class="day"><div class="dh"><b>${title||fd(d,{day:1})}</b></div><div class="empty">Hors plan.</div></div>`;
  const list=p.ses.length?p.ses.map((s,i)=>sesHtml(s,d,i)).join(''):'<div class="empty">Repos (ou séance de salle seulement).</div>';
- return `<div class="day${isT?' today':''}"><div class="dh"><b>${title||fd(d,{day:1})}</b><span class="note">${d<START?'avant le plan':''}</span></div>${list}${rt?routineHtml(d):''}</div>`;
+ return `<div class="day${isT?' today':''}"><div class="dh"><b>${title||fd(d,{day:1})}</b>${wxs?wxLine(d):`<span class="note">${d<START?'avant le plan':''}</span>`}</div>${wxs?wxNotes(d):''}${list}${rt?routineHtml(d):''}</div>`;
 }
 function weekHead(mon){
  const p=PLAN[key(mon)];if(!p)return '';const T=weekTotals(mon);
@@ -643,6 +651,27 @@ function routineHtml(d){
 function clampDay(d){return d<START?START:(d>RACE?RACE:d);}
 function nextRace(d){return EV.filter(e=>e.type==='race'&&D(e.d)>=d)[0];}
 
+// ============================================================
+// Météo (Open-Meteo, sans clé)
+// ============================================================
+const PLACES={mdm:{n:'Mont-de-Marsan',lat:43.89,lon:-0.50},tarbes:{n:'Tarbes',lat:43.23,lon:0.08}};
+function wxPlace(d){const c=ST.wxLoc||'auto';if(c!=='auto')return c;const p=PLAN[key(d)];return p&&p.S?'tarbes':'mdm';}
+async function loadWeather(){
+ if(typeof fetch==='undefined')return;const pl=wxPlace(today()),P=PLACES[pl];
+ if(ST.wx&&ST.wx.pl===pl&&Date.now()-ST.wx.at<3*3600e3)return;
+ try{const r=await fetch(`https://api.open-meteo.com/v1/forecast?latitude=${P.lat}&longitude=${P.lon}&daily=temperature_2m_max,temperature_2m_min,precipitation_probability_max,wind_speed_10m_max,weather_code&timezone=Europe%2FParis&forecast_days=3`);
+  const j=await r.json();const D0=j.daily;ST.wx={pl,at:Date.now(),days:{}};
+  D0.time.forEach((t,i)=>ST.wx.days[t]={tmax:D0.temperature_2m_max[i],tmin:D0.temperature_2m_min[i],rain:D0.precipitation_probability_max[i],wind:D0.wind_speed_10m_max[i],code:D0.weather_code[i]});
+  save();if(TAB==='today'){const y=window.scrollY;render();window.scrollTo(0,y);}}catch(e){}}
+function wxIcon(c){return c>=95?'⛈':c>=71&&c<=77?'❄️':c>=51?'🌧':c>=45?'🌫':c>=2?'⛅':'☀️';}
+function wxFor(d){return ST.wx&&ST.wx.days&&ST.wx.days[key(d)];}
+function wxNotes(d){const w=wxFor(d),p=PLAN[key(d)];if(!w||!p)return '';const out=[];const has=sp=>p.ses.some(s=>s.sp===sp);
+ if((has('run')||has('race')||has('test'))&&w.tmax>=25)out.push(`🌡 ${Math.round(w.tmax)} °C : allures +10-15 s/km, cours tôt ou tard, bois ${w.tmax>=30?'750':'600'} ml/h et ajoute du sel.`);
+ if(has('bike')&&(w.wind>=35||w.rain>=70))out.push(`${w.rain>=70?'🌧 Pluie probable ('+w.rain+' %)':'💨 Vent fort ('+Math.round(w.wind)+' km/h)'} : plan B home-trainer (ou vélo de la salle), même durée${w.wind>=35&&w.rain<70?' — ou pars vent de face pour rentrer vent dans le dos':''}.`);
+ if(has('bike')&&w.tmin<=1)out.push(`🧊 ${Math.round(w.tmin)} °C le matin : roule plutôt l'après-midi, risque de verglas.`);
+ if(has('run')&&w.tmax<=3)out.push('🥶 Froid : échauffement plus long (+5\'), couvre mains et oreilles.');
+ return out.length?`<div class="adv orange" style="margin-top:8px">${out.join('<br>')}</div>`:'';}
+function wxLine(d){const w=wxFor(d);if(!w)return '';return `<span class="note">${wxIcon(w.code)} ${Math.round(w.tmin)}°/${Math.round(w.tmax)}° · 💨 ${Math.round(w.wind)} km/h${w.rain>=30?' · 🌧 '+w.rain+' %':''}</span>`;}
 function vToday(){
  const d=clampDay(today()),p=PLAN[key(d)],nr=nextRace(d),j=diff(today(),RACE);
  return `<div class="card"><div class="kpis">
@@ -826,6 +855,7 @@ function vSettingsOld(){
   <div class="row"><span style="width:150px">FTP (watts)</span><input type="number" id="ftp" value="${ST.ftp||''}" placeholder="ex. 230" style="width:110px"></div>
   <div class="row" style="margin-top:8px"><span style="width:150px">FC max (bpm)</span><input type="number" id="fcmax" value="${ST.fcmax||''}" placeholder="ex. 210" style="width:110px"></div>
   <div class="row" style="margin-top:8px"><span style="width:150px">Poids (kg)</span><input type="number" id="weight" value="${ST.weight||''}" placeholder="ex. 75" style="width:110px"></div>
+  <div class="row" style="margin-top:8px"><span style="width:150px">Météo</span><select data-act="wxloc"><option value="auto" ${(ST.wxLoc||'auto')==='auto'?'selected':''}>Auto (école → Tarbes, sinon Mont-de-Marsan)</option><option value="mdm" ${ST.wxLoc==='mdm'?'selected':''}>Mont-de-Marsan</option><option value="tarbes" ${ST.wxLoc==='tarbes'?'selected':''}>Tarbes</option></select></div>
   <div class="row" style="margin-top:8px"><span style="width:150px">Taille (cm)</span><input type="number" id="height" value="${ST.height||''}" style="width:110px"></div>
   <div class="row" style="margin-top:8px"><span style="width:150px">EF en aisance (/km)</span><input type="text" id="ef" value="${mss(ST.ef||360)}" style="width:110px"></div>
   <div class="row" style="margin-top:8px"><span style="width:150px">Sprint 30 s (/km)</span><input type="text" id="sprint" value="${mss(ST.sprint||210)}" style="width:110px"></div>
@@ -896,7 +926,7 @@ function saveLog(id){
  const a=document.querySelector(`select[data-log="${id}"][data-part="a"]`),b=document.querySelector(`select[data-log="${id}"][data-part="b"]`);if(!a||!b)return;
  const [k,i]=[id.slice(0,10),+id.slice(11)],p=PLAN[k],s=p&&p.ses[i];if(!s)return;const kd=sesKind(s);
  const val=kd.sp==='bike'?(+a.value)+(+b.value)/10:(+a.value)*60+(+b.value);
- ST.log=ST.log||{};const L={d:k,sp:kd.sp,k:kd.k,t:s.t,val,plan:plannedVal(s,p.d,kd)};
+ ST.log=ST.log||{};const L={d:k,sp:kd.sp,k:kd.k,t:s.t,val,plan:plannedVal(s,p.d,kd),vd:ctx(p.d).v};
  if(kd.k==='race')L.dist=RACEDIST(s.t);if(kd.thr)L.thr=1;
  ST.log[id]=L;ST.done[id]=1;save();
  if(L.dist||L.thr){build();}
@@ -1119,16 +1149,27 @@ function icsCard(){
 // ============================================================
 // Suivi de fatigue
 // ============================================================
-function wellScore(w,k){if(!w)return null;
- let s=(w.sleep-1)/4*30+(w.legs-1)/4*40+(3-w.pain)/3*30;
- const b=rhrBase(k);if(w.rhr&&b){const dv=w.rhr-b;if(dv>=8)s-=25;else if(dv>=5)s-=15;}
- return Math.max(0,Math.min(100,Math.round(s)));}
-function rhrBase(k){const v=[];for(let i=1;i<=14&&v.length<7;i++){const w=(ST.well||{})[key(add(D(k),-i))];if(w&&w.rhr)v.push(w.rhr);}return v.length>=3?v.reduce((a,b)=>a+b,0)/v.length:null;}
-function wellStatus(k){const w=(ST.well||{})[k];if(!w)return null;const s=wellScore(w,k);
- if(w.pain>=2)return {c:'red',s,t:'Douleur : pas de course aujourd\'hui',x:'Remplace la course par la même durée en vélo, natation ou elliptique/rameur à la salle, sans douleur. Si ça dure plus de 3 jours ou si ça boite, va voir un médecin ou un kiné.'};
- if(s<50)return {c:'red',s,t:'Récupération prioritaire',x:'Fais 30-40\' très facile (ou repos complet) à la place de la séance intense. Salle : haut du corps léger, pas d\'échec. Couche-toi tôt.'};
- if(s<70)return {c:'orange',s,t:'Séance allégée',x:'Fais la séance mais enlève 1 répétition sur 4 et reste 5 s/km plus lent sur les fractions. Si les sensations restent mauvaises après l\'échauffement, bascule en footing facile.'};
+function effW(w){return {sleep:w.sleep??w.gSleep??3,legs:w.legs??4,pain:w.pain??0,rhr:w.rhr??w.gRhr,hrv:w.hrv};}
+function hasW(w){return !!w&&['sleep','legs','pain','rhr','gSleep','gRhr','hrv'].some(k=>w[k]!=null);}
+function prevAvg(k,f){const v=[];for(let i=1;i<=14&&v.length<7;i++){const x=(ST.well||{})[key(add(D(k),-i))];const val=x&&f(x);if(val)v.push(val);}return v.length>=3?v.reduce((a,b)=>a+b,0)/v.length:null;}
+function rhrBase(k){return prevAvg(k,x=>x.rhr??x.gRhr);}
+function wellScore(w,k){if(!hasW(w))return null;const e=effW(w);
+ let s=(e.sleep-1)/4*30+(e.legs-1)/4*40+(3-e.pain)/3*30,pen=0;
+ const rb=rhrBase(k);if(e.rhr&&rb){const dv=e.rhr-rb;pen+=dv>=8?25:dv>=5?15:0;}
+ const hb=prevAvg(k,x=>x.hrv);if(e.hrv&&hb){const r=e.hrv/hb;pen+=r<0.75?25:r<0.85?15:0;}
+ s-=Math.min(30,pen);return Math.max(0,Math.min(100,Math.round(s)));}
+function wellStatus(k){const w=(ST.well||{})[k];if(!hasW(w))return null;const s=wellScore(w,k),e=effW(w);
+ if(e.pain>=2)return {c:'red',s,pain:1,t:'Douleur : pas de course aujourd\'hui',x:'La course du jour est remplacée par du vélo, de la natation ou de l\'elliptique/rameur à la salle, sans douleur. Si ça dure plus de 3 jours ou si ça boite, va voir un médecin ou un kiné.'};
+ if(s<50)return {c:'red',s,t:'Récupération prioritaire',x:'La séance intense du jour est remplacée par 30-40\' très facile (ou repos complet). Salle : haut du corps léger, pas d\'échec. Couche-toi tôt.'};
+ if(s<70)return {c:'orange',s,t:'Séance allégée',x:'La séance du jour est allégée : 1 répétition sur 4 en moins et 5 s/km plus lent sur les fractions. Si les sensations restent mauvaises après l\'échauffement, bascule en footing facile.'};
  return {c:'green',s,t:'Feu vert',x:'Séance comme prévue.'};}
+function setWell(f,v){const k=key(today());ST.well=ST.well||{};ST.well[k]=Object.assign({},ST.well[k],{[f]:v,ts:Date.now()});save();
+ if(ST.appKey&&typeof fetch!=='undefined'&&/^https?:$/.test(location.protocol))fetch('/api/well',{method:'POST',headers:{'content-type':'application/json','x-app-key':ST.appKey},body:JSON.stringify({date:k,[f]:v})}).catch(()=>{});
+ build();const y=window.scrollY;render();window.scrollTo(0,y);}
+function mergeWell(ws,ans){ST.well=ST.well||{};
+ (ws||[]).forEach(g=>{const w=ST.well[g.date]=Object.assign({},ST.well[g.date]);w.gRhr=g.rhr;w.hrv=g.hrv;w.sleepH=g.sleepH;
+  w.gSleep=g.sleepScore?(g.sleepScore>=85?5:g.sleepScore>=75?4:g.sleepScore>=60?3:g.sleepScore>=45?2:1):g.sleepH?(g.sleepH>=8?5:g.sleepH>=7?4:g.sleepH>=6?3:g.sleepH>=5?2:1):null;});
+ Object.entries(ans||{}).forEach(([d,a])=>{const w=ST.well[d]=Object.assign({},ST.well[d]);if((a.ts||0)>(w.ts||0)){['sleep','legs','pain','rhr'].forEach(k=>{if(a[k]!=null)w[k]=a[k];});w.ts=a.ts;}});}
 function dayLoad(d){const p=PLAN[key(d)];let L=0;if(p)p.ses.forEach((s,j)=>{if(!ST.done[key(d)+'-'+j]||s.sp==='gym'||s.sp==='rest')return;const mn=s.sp==='swim'?swimMin(s,d):(s.min||0);L+=mn*(s.sp==='race'?2:s.q?1.6:1);});
  Object.values(ST.extra||{}).forEach(a=>{if(a.date===key(d))L+=a.time/60;});return L;}
 function acwr(d){let a=0,c=0;for(let i=0;i<28;i++){const l=dayLoad(add(d,-i));if(i<7)a+=l;c+=l;}c=c/4;return c>60?a/c:null;}
@@ -1138,11 +1179,12 @@ function wellCard(){
  const k=key(today()),w=(ST.well||{})[k]||{},st=wellStatus(k),r=acwr(today()),wk=wkKey(monday(today()));
  const forced=(ST.recW||{})[wk],sick=offInfo(today());
  return `<div class="card"><div class="row"><h2 class="sp" style="margin:0">Forme du jour</h2>${st?`<span class="badge ${st.c}">${st.s}/100</span>`:''}</div>
-  <div class="wl"><span>Sommeil</span>${seg('sleep',w.sleep,[[1,'😫'],[2,'😕'],[3,'😐'],[4,'🙂'],[5,'😴']])}</div>
+  <div class="wl"><span>Sommeil${w.sleep==null&&w.gSleep!=null?' (⌚ montre)':''}</span>${seg('sleep',w.sleep??w.gSleep,[[1,'😫'],[2,'😕'],[3,'😐'],[4,'🙂'],[5,'😴']])}</div>
   <div class="wl"><span>Jambes / énergie</span>${seg('legs',w.legs,[[1,'1'],[2,'2'],[3,'3'],[4,'4'],[5,'5']])}</div>
   <div class="wl"><span>Douleur</span>${seg('pain',w.pain,[[0,'Aucune'],[1,'Légère'],[2,'Gêne'],[3,'Boite']])}</div>
-  <div class="wl"><span>FC au réveil</span><div class="row"><select data-well="rhr"><option value="">—</option>${Array.from({length:61},(_,i)=>35+i).map(v=>`<option ${w.rhr===v?'selected':''}>${v}</option>`).join('')}</select><span class="note">bpm (montre ou 1 min au réveil)</span></div></div>
-  ${st?`<div class="adv ${st.c}"><b>${st.t}</b><div>${st.x}</div></div>`:'<p class="note">Remplis les 3 curseurs le matin (10 s) : l\'appli te dit si tu fais la séance comme prévu, allégée ou pas du tout.</p>'}
+  <div class="wl"><span>FC au réveil</span><div class="row"><select data-well="rhr"><option value="">${w.gRhr?'⌚ '+w.gRhr:'—'}</option>${Array.from({length:61},(_,i)=>35+i).map(v=>`<option ${w.rhr===v?'selected':''}>${v}</option>`).join('')}</select><span class="note">${w.gRhr?'lue sur ta Garmin':'bpm (montre ou 1 min au réveil)'}</span></div></div>
+  ${w.gSleep!=null||w.gRhr||w.hrv?`<p class="note">⌚ Garmin : ${w.sleepH?'sommeil '+String(w.sleepH).replace('.',',')+' h · ':''}${w.gRhr?'FC repos '+w.gRhr+' · ':''}${w.hrv?'VFC '+Math.round(w.hrv)+' ms':''}${w.sleep==null&&w.gSleep!=null?' (sommeil pris depuis la montre)':''}</p>`:''}
+  ${st?`<div class="adv ${st.c}"><b>${st.t}</b><div>${st.x}</div></div>`:'<p class="note">Ta montre remplit le sommeil et la FC. Indique tes jambes et une éventuelle douleur (ici ou depuis le widget) : la séance du jour s\'adapte toute seule.</p>'}
   ${r?`<p class="note">Charge 7 jours / moyenne 4 semaines : <b style="color:${r>1.5?'var(--test)':r>1.3?'var(--race)':'var(--bike)'}">${r.toFixed(2).replace('.',',')}</b> ${r>1.5?'→ hausse trop brutale, risque de blessure : allège 2-3 jours.':r>1.3?'→ limite haute, surveille.':'→ zone sûre (0,8-1,3).'}</p>`:''}
   ${wellTrend(k)&&!forced?`<div class="adv orange"><b>3 jours de fatigue d'affilée</b><div>Je te conseille de passer cette semaine en récupération (−30 % de volume, intensité réduite).</div><button class="btn sm" style="margin-top:6px" data-act="recw">Passer la semaine en récup</button></div>`:''}
   ${forced?`<p class="note">Semaine passée en récup. <button class="lnk" style="padding:0" data-act="recw">annuler</button></p>`:''}
@@ -1155,7 +1197,53 @@ function applyAdjust(){
   if(o.type==='sick')p.ses=[{sp:'rest',t:'Malade · repos',x:'Repos. Hydratation, sommeil. Reprise par 2 jours très faciles quand la fièvre est partie depuis 24 h.'}];
   else p.ses=p.ses.map(s=>s.sp==='run'?{sp:'bike',t:'Remplacement blessure',min:s.min||40,x:`${hm(s.min||40)} sans douleur à la place de « ${s.t} » : vélo, home-trainer, elliptique ou rameur à la salle${p.S&&(p.d.getDay()+6)%7<5?' (semaine école : elliptique/vélo de la salle)':', ou natation avec pull-buoy'}. Garde l'intensité prévue si aucune douleur, sinon reste facile.`,cross:1}:s);}
   // semaine de reprise allégée après une absence
- });}
+ });
+ adaptToday();moveMissed();}
+const HARD=/VMA|Seuil|Tempo|Allure|Fartlek|Côtes|Test seuil/;
+function adaptToday(){
+ const k=key(today()),p=PLAN[k],st=wellStatus(k);if(!p||!st||st.c==='green')return;
+ const note=t=>`⚠ Adapté à ta forme (${st.s}/100) · prévu : ${t}. `;
+ p.ses=p.ses.map(s=>{
+  if(s.sp==='test'&&s.ev&&s.ev.sp==='run'&&st.c==='red')return {...s,adj:1,x:`⚠ Forme basse (${st.s}/100) : reporte ce test à un jour où tu te sens bien, sinon le résultat sous-estimera ton niveau. En attendant, 35' très facile. `+s.x};
+  if(s.sp==='race'||s.sp==='rest'||s.sp==='multi'||s.ev)return s;
+  if(st.pain&&s.sp==='run')return {sp:'bike',t:'Cross-training (douleur)',min:s.min||40,adj:1,x:note(s.t)+`${hm(s.min||40)} sans douleur : vélo, home-trainer, elliptique ou rameur à la salle${p.S&&(p.d.getDay()+6)%7<5?'':', ou natation avec pull-buoy'}. Intensité facile.`};
+  if(st.c==='red'){
+   if(s.sp==='run'&&(s.q||HARD.test(s.t)))return {...run('Récup (forme basse)',s.t==='Sortie longue'?50:35,note(s.t)+(s.t==='Sortie longue'?"50' très facile à {E} au lieu de la sortie longue, ou repos complet si tu te sens vraiment mal.":"35' très facile à {E} ou repos complet. La séance prévue est annulée, on ne la rattrape pas.")),adj:1};
+   if(s.sp==='bike'&&!/souple/.test(s.t))return {...bikeS('easy',Math.min(60,(s.min||60)*0.6)),adj:1,x:note(s.t)+bikeS('easy',Math.min(60,(s.min||60)*0.6)).x};
+   if(s.sp==='swim'&&!/récup|technique/.test(s.t))return {...swimS('recup',Math.round((s.m||2000)*0.7)),adj:1};
+   if(s.sp==='gym')return {...s,adj:1,x:'Séance légère (−40 %), pas d\'échec, pas de finisher jambes.'};
+   return s;}
+  // orange
+  if(s.sp==='run'&&(s.q||HARD.test(s.t))&&s.t!=='Sortie longue')return {...s,t:s.t+' (allégée)',min:Math.round((s.min||45)*0.85),adj:1,x:s.x+' ⚠ Forme moyenne : enlève 1 répétition sur 4 et reste 5 s/km plus lent que prévu. Si ça ne va pas après l\'échauffement → footing facile.'};
+  if(s.sp==='run'&&s.t==='Sortie longue')return {...s,adj:1,x:s.x+' ⚠ Forme moyenne : supprime les blocs à allure, tout en endurance, et raccourcis de 3-4 km si besoin.'};
+  if(s.sp==='bike'&&/seuil|sweet|force|tempo|Ironman/i.test(s.t))return {...s,t:s.t+' (allégée)',adj:1,x:s.x+' ⚠ Forme moyenne : 1 bloc intense en moins, le reste en Z2.'};
+  if(s.sp==='gym')return {...s,adj:1,x:s.x.replace(/ Finisher jambes.*$/,'')+' Forme moyenne : pas de finisher jambes aujourd\'hui.'};
+  return s;});}
+let NOMOVE=false;
+function moveMissed(){
+ if(NOMOVE)return;
+ // une séance clé (VMA/seuil) non faite hier ou avant-hier est replacée sur le prochain jour libre de la semaine
+ const t=today(),sun=add(monday(t),6);if(t<START)return;
+ for(let back=2;back>=1;back--){
+  const d=add(t,-back);if(monday(d)<monday(t))continue;const k=key(d),p=PLAN[k];if(!p||offInfo(d))continue;
+  p.ses.forEach((s,i)=>{
+   if(s.sp!=='run'||!s.q||s.ev||s.t==='Sortie longue'||s.moved||s.adj||ST.done[k+'-'+i]||(ST.log||{})[k+'-'+i])return;
+   if(!HARD.test(s.t))return;
+   if(Object.values(ST.extra||{}).some(a=>a.date===k&&a.sp==='run'))return;
+   let placed=0;
+   for(let dd=t;dd<=sun;dd=add(dd,1)){
+    const kk=key(dd),q=PLAN[kk],nx=PLAN[key(add(dd,1))];if(!q)continue;
+    if(q.ses.some(z=>z.sp==='race'||z.ev||z.t==='Veille de course'||(z.sp==='run'&&(z.q||z.t==='Sortie longue'))))continue;
+    const pv=PLAN[key(add(dd,-1))];
+    if(nx&&nx.ses.some(z=>z.sp==='race'||z.t==='Sortie longue'||z.ev))continue;
+    if(pv&&pv.ses.some(z=>z.sp==='race'||z.t==='Sortie longue'))continue;
+    const j=q.ses.findIndex(z=>z.sp==='run');
+    const mv={...s,moved:k,x:`↪︎ Déplacée du ${fd(d,{day:1})} (non faite). `+s.x};
+    if(j>=0)q.ses[j]=mv;else q.ses.unshift(mv);
+    p.ses[i]={sp:'rest',t:s.t+' → déplacée',x:`Séance non remontée de ta montre : replacée le ${fd(dd,{day:1})}.`,moved:k,ghost:1};
+    placed=1;break;}
+   if(!placed)p.ses[i]={sp:'rest',t:s.t+' → non rattrapée',x:'Séance non remontée de ta montre. Pas de place cette semaine sans empiler deux séances dures : on ne la rattrape pas, c\'est mieux que de se cramer.',moved:k,ghost:1};
+  });}}
 // ============================================================
 // Strava (via fonctions Netlify)
 // ============================================================
@@ -1180,7 +1268,7 @@ function importStrava(list){
   const s=p.ses[idx],kd=sesKind(s),plan=plannedVal(s,p.d,kd),id=k+'-'+idx;
   let val;if(sp==='run')val=(kd.k==='seuil'||kd.k==='vma')?workPace(a,plan):a.time/(a.dist/1000);
   else if(sp==='bike')val=a.dist/a.time*3.6;else val=a.time/(a.dist/100);
-  const L={d:k,i:idx,sp,k:kd.k,t:s.t,val,plan,src:'strava',sid:a.id,name:a.name,sdist:a.dist,time:a.time,hr:a.hr,dplus:a.dplus};
+  const L={d:k,i:idx,sp,k:kd.k,t:s.t,val,plan,vd:ctx(p.d).v,src:'strava',sid:a.id,name:a.name,sdist:a.dist,time:a.time,hr:a.hr,dplus:a.dplus};
   if(kd.k==='race')L.dist=RACEDIST(s.t);if(kd.thr)L.thr=1;
   if(!ST.log[id]||ST.log[id].src!=='strava')n++;
   delete ST.extra[a.id];ST.log[id]=L;ST.done[id]=1;});
@@ -1193,7 +1281,7 @@ async function stravaSync(manual){
   const after=Math.floor(Math.max(+D('2026-10-19')/1000,(ST.svLast||0)-3*86400));
   const r=await fetch('/api/sync',{method:'POST',headers:{'content-type':'application/json','x-app-key':ST.appKey},body:JSON.stringify({after})});
   const j=await r.json();if(!r.ok)throw new Error(j.error||r.status);
-  const res=importStrava(j.activities||[]);ST.svLast=Date.now()/1000;ST.svAth=j.athlete||ST.svAth;ST.svMsg=`${fd(today())} ${new Date().toTimeString().slice(0,5)} · ${j.activities.length} activité(s) lue(s), ${res.n} séance(s) mise(s) à jour${res.x?', '+res.x+' hors plan':''}.`;
+  mergeWell(j.wellness,j.answers);NOMOVE=true;build();const res=importStrava(j.activities||[]);NOMOVE=false;ST.svLast=Date.now()/1000;ST.svAth=j.athlete||ST.svAth;ST.svMsg=`${fd(today())} ${new Date().toTimeString().slice(0,5)} · ${j.activities.length} activité(s) lue(s), ${res.n} séance(s) mise(s) à jour${res.x?', '+res.x+' hors plan':''}.`;
   save();build();const y=window.scrollY;render();window.scrollTo(0,y);
  }catch(e){ST.svMsg='Échec : '+e.message;save();if(manual)render();}
  SYNCING=false;}
@@ -1220,6 +1308,7 @@ function render(){
  if(TAB==='cal'&&!render.kept){const t=clampDay(today()),el=document.getElementById('m-'+t.getFullYear()+'-'+t.getMonth());if(el)el.scrollIntoView();}
 }
 function rebuild(){build();render();}
+let LASTDAY=key(today());
 function init(){
  document.getElementById('tabs').addEventListener('click',e=>{const b=e.target.closest('button');if(!b)return;TAB=b.dataset.t;window.scrollTo(0,0);render();});
  const V=document;
@@ -1227,16 +1316,17 @@ function init(){
   const t=e.target;
   if(t.dataset.id){if(t.checked)ST.done[t.dataset.id]=1;else delete ST.done[t.dataset.id];save();t.closest('.ses').classList.toggle('done',t.checked);if(TAB==='cal'&&SHEET){const y=window.scrollY;render();window.scrollTo(0,y);}return;}
   if(t.dataset.log){saveLog(t.dataset.log);return;}
-  if(t.dataset.well){const k=key(today());ST.well=ST.well||{};ST.well[k]=Object.assign({sleep:3,legs:3,pain:0},ST.well[k]);ST.well[k].rhr=t.value?+t.value:null;save();const y=window.scrollY;render();window.scrollTo(0,y);return;}
+  if(t.dataset.well){setWell('rhr',t.value?+t.value:null);return;}
   if(t.dataset.nc){if(t.dataset.nc==='unit'){const v=toKmh(NC.speed,NC.unit);NC.unit=t.value;if(v>0)NC.speed=fromKmh(v,t.value);}else NC[t.dataset.nc]=t.type==='checkbox'?(t.checked?1:0):t.value;ncSave();const y=window.scrollY;render();window.scrollTo(0,y);return;}
   if(t.dataset.act==='phase'){WEEK=D(t.value);render();}
+  if(t.dataset.act==='wxloc'){ST.wxLoc=t.value;ST.wx=null;save();loadWeather();return;}
   if(t.dataset.act==='gym'){const G=(ST.gym||GYM0).slice();G[+t.dataset.i]=t.value;ST.gym=G;save();build();}
  });
  V.addEventListener('click',e=>{
   const b=e.target.closest('[data-act]');if(!b||b.tagName==='SELECT')return;const a=b.dataset.act;
   if(a==='day'){SHEET=b.dataset.d;renderSheet();return;}
   if(a==='logok'){saveLog(b.dataset.id);return;}
-  if(a==='well'){const k=key(today());ST.well=ST.well||{};ST.well[k]=Object.assign({sleep:3,legs:3,pain:0},ST.well[k]);ST.well[k][b.dataset.f]=+b.dataset.v;ST.well[k].set=1;save();const y=window.scrollY;render();window.scrollTo(0,y);return;}
+  if(a==='well'){setWell(b.dataset.f,+b.dataset.v);return;}
   if(a==='recw'){const wk=wkKey(monday(today()));ST.recW=ST.recW||{};if(ST.recW[wk])delete ST.recW[wk];else ST.recW[wk]=1;save();rebuild();return;}
   if(a==='off'){const n=+document.getElementById('offn').value;ST.off=ST.off||[];ST.off.push({type:b.dataset.v,from:key(today()),to:key(add(today(),n-1))});
    if(b.dataset.v==='sick'||n>=5){ST.recW=ST.recW||{};ST.recW[wkKey(monday(add(today(),n)))]=1;}save();rebuild();return;}
@@ -1274,9 +1364,10 @@ function init(){
  });
  V.addEventListener('pointermove',chartHover);V.addEventListener('pointerdown',chartHover);
  build();render();
+ loadWeather();
  if(/[?&]strava=ok/.test(location.search)){history.replaceState(null,'',location.pathname);TAB='settings';render();stravaSync(true);}
- else if(ST.appKey&&Date.now()/1000-(ST.svLast||0)>1800)stravaSync();
- document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible'&&ST.appKey&&Date.now()/1000-(ST.svLast||0)>1800)stravaSync();});
+ else if(ST.appKey&&Date.now()/1000-(ST.svLast||0)>900)stravaSync();
+ document.addEventListener('visibilitychange',()=>{if(document.visibilityState!=='visible')return;loadWeather();if(key(today())!==LASTDAY){LASTDAY=key(today());build();render();}if(ST.appKey&&Date.now()/1000-(ST.svLast||0)>900)stravaSync();});
 }
 if(typeof document!=='undefined'&&document.getElementById('view'))init();
 </script>

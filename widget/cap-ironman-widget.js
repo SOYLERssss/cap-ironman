@@ -1,5 +1,5 @@
 // Cap Ironman 2028 – widget « Aujourd'hui » + questionnaire de forme
-// À coller dans Scriptable. Widget : When Interacting → Run Script.
+// À coller dans Scriptable. Toucher le widget ouvre l'appli ; lancer le script dans Scriptable ouvre le questionnaire.
 const SITE = "https://vocal-puppy-e80bd4.netlify.app";
 const KC = "capironman_appkey";
 const fam = config.widgetFamily || "medium";
@@ -96,7 +96,7 @@ async function widget() {
   if (key) { try { well = await api("GET", key); } catch (e) {} }
   const sc = well && well.score;
   const w = new ListWidget();
-  w.backgroundColor = new Color("#0f141a"); w.setPadding(14, 14, 12, 14);
+  w.backgroundColor = new Color("#0f141a"); w.setPadding(14, 14, 12, 14); w.url = SITE;
   const grey = new Color("#8fa0b3"), light = new Color("#c7d2dd");
 
   const top = w.addStack(); top.centerAlignContent();
@@ -129,14 +129,14 @@ async function widget() {
   }
   w.addSpacer();
   let foot;
-  if (!key) foot = "👆 Touche pour configurer";
-  else if (!well || !well.answered) foot = "👆 Touche pour donner ta forme";
+  if (!key) foot = "Lance le script dans Scriptable pour le configurer";
+  else if (!well || !well.answered) foot = "👆 Bouton « Forme du jour » : jambes + douleur";
   else if (sc && sc.c !== "green") foot = sc.t.startsWith("Douleur") ? "⚠ Course remplacée (douleur)" : sc.c === "red" ? "⚠ Récup : séance intense remplacée" : "⚠ Séance allégée";
   else foot = today.phase || "";
   const f = w.addText(foot); f.font = Font.systemFont(10); f.lineLimit = 1;
   f.textColor = sc && sc.c !== "green" && well.answered ? new Color(COL[sc.c]) : grey;
   if (!txt) { const e = w.addText("Pas de connexion"); e.font = Font.systemFont(10); e.textColor = grey; }
-  w.refreshAfterDate = new Date(Date.now() + 60 * 60000);
+  w.refreshAfterDate = new Date(Date.now() + 15 * 60000);
   return w;
 }
 

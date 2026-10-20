@@ -890,7 +890,7 @@ function spdHtml(s,d,id){
  else{const r=Math.round(v),mn=Math.floor(r/60),sc=r%60,two=x=>String(x).padStart(2,'0');
   pick=`<select data-log="${id}" data-part="a">${kd.sp==='swim'?opt(1,3,1,mn):opt(3,8,1,mn)}</select><span>:</span><select data-log="${id}" data-part="b">${opt(0,59,1,sc,two)}</select><span>${kd.sp==='swim'?'/100 m':'/km'}</span>`;}
  return `<div class="spd${L?' set':''}"><span class="sl">${spdLabel(kd,s)}</span><div class="pk">${pick}</div><button class="btn sm${L?'':' p'}" data-act="logok" data-id="${id}">${L?'✓ Enregistré':'Valider'}</button></div>
-  <div class="note" style="margin-top:2px">${L&&L.src==='strava'?`🟠 Strava : ${esc(L.name||'')} · ${L.sdist>0?((Math.round(L.sdist/100)/10).toString().replace('.',',')+' km · '):''}${L.time?hm(L.time/60)+' · ':''}${L.hr?'FC '+Math.round(L.hr)+' · ':''}`:''}${L?'Prévu : '+fmtVal(kd.sp,plannedVal(s,d,kd))+` · <button class="lnk" style="padding:0" data-act="logdel" data-id="${id}">effacer</button>`:'Préréglé sur l\'allure prévue : fais défiler pour mettre ta vraie valeur.'}</div>`;}
+  <div class="note" style="margin-top:2px">${L&&L.src==='strava'?`⌚ Garmin : ${esc(L.name||'')} · ${L.sdist>0?((Math.round(L.sdist/100)/10).toString().replace('.',',')+' km · '):''}${L.time?hm(L.time/60)+' · ':''}${L.hr?'FC '+Math.round(L.hr)+' · ':''}`:''}${L?'Prévu : '+fmtVal(kd.sp,plannedVal(s,d,kd))+` · <button class="lnk" style="padding:0" data-act="logdel" data-id="${id}">effacer</button>`:'Préréglé sur l\'allure prévue : fais défiler pour mettre ta vraie valeur.'}</div>`;}
 function fmtVal(sp,v){return sp==='bike'?(Math.round(v*10)/10).toString().replace('.',',')+' km/h':mss(v)+(sp==='swim'?'/100 m':'/km');}
 function saveLog(id){
  const a=document.querySelector(`select[data-log="${id}"][data-part="a"]`),b=document.querySelector(`select[data-log="${id}"][data-part="b"]`);if(!a||!b)return;
@@ -1159,9 +1159,10 @@ function applyAdjust(){
 // ============================================================
 // Strava (via fonctions Netlify)
 // ============================================================
-const STRAVA_SP={Run:'run',TrailRun:'run',VirtualRun:'run',Ride:'bike',VirtualRide:'bike',GravelRide:'bike',MountainBikeRide:'bike',EBikeRide:'bike',Swim:'swim'};
+const STRAVA_SP={Run:'run',TrailRun:'run',VirtualRun:'run',Ride:'bike',VirtualRide:'bike',GravelRide:'bike',MountainBikeRide:'bike',EBikeRide:'bike',Swim:'swim',OpenWaterSwim:'swim'};
 function workPace(a,target){
  const laps=(a.laps||[]).filter(l=>l.dist>=80&&l.time>=20).map(l=>({...l,p:l.time/(l.dist/1000)}));
+ const wk=laps.filter(l=>l.work);if(wk.reduce((x,l)=>x+l.time,0)>=120)return wk.reduce((x,l)=>x+l.time,0)/wk.reduce((x,l)=>x+l.dist,0)*1000;
  const w=laps.filter(l=>l.p<=target*1.08&&l.p>=target*0.85);const t=w.reduce((x,l)=>x+l.time,0);
  if(t>=180)return w.reduce((x,l)=>x+l.time,0)/w.reduce((x,l)=>x+l.dist,0)*1000;
  return a.time/(a.dist/1000);}
@@ -1190,19 +1191,18 @@ async function stravaSync(manual){
  SYNCING=true;const msg=document.getElementById('svmsg');if(msg)msg.textContent='Synchronisation…';
  try{
   const after=Math.floor(Math.max(+D('2026-10-19')/1000,(ST.svLast||0)-3*86400));
-  const r=await fetch('/api/strava/sync',{method:'POST',headers:{'content-type':'application/json','x-app-key':ST.appKey},body:JSON.stringify({after})});
+  const r=await fetch('/api/sync',{method:'POST',headers:{'content-type':'application/json','x-app-key':ST.appKey},body:JSON.stringify({after})});
   const j=await r.json();if(!r.ok)throw new Error(j.error||r.status);
   const res=importStrava(j.activities||[]);ST.svLast=Date.now()/1000;ST.svAth=j.athlete||ST.svAth;ST.svMsg=`${fd(today())} ${new Date().toTimeString().slice(0,5)} · ${j.activities.length} activité(s) lue(s), ${res.n} séance(s) mise(s) à jour${res.x?', '+res.x+' hors plan':''}.`;
   save();build();const y=window.scrollY;render();window.scrollTo(0,y);
  }catch(e){ST.svMsg='Échec : '+e.message;save();if(manual)render();}
  SYNCING=false;}
 function stravaCard(){
- const on=typeof location!=='undefined'&&/^https?:$/.test(location.protocol);
- return `<div class="card"><h2>Strava</h2>
-  <div class="row"><span style="width:120px">Clé de l'appli</span><input type="password" id="appkey" value="${esc(ST.appKey||'')}" placeholder="celle mise dans Netlify" style="width:170px"><button class="btn sm" data-act="savekey">OK</button></div>
-  <div class="row" style="margin-top:10px"><a class="btn p" style="text-decoration:none" href="${on&&ST.appKey?'/api/strava/auth?key='+encodeURIComponent(ST.appKey):'#'}" ${ST.appKey?'':'aria-disabled="true"'}>${ST.svAth?'Reconnecter Strava':'Connecter Strava'}</a><button class="btn" data-act="sync">Synchroniser</button></div>
-  <p class="note" id="svmsg">${esc(ST.svMsg||(ST.svAth?'Connecté.':'Pas encore connecté.'))}</p>
-  <p class="note">Une fois connecté, l'appli récupère tes activités à chaque ouverture : allure, vitesse, FC, dénivelé. Chaque activité est rangée sur la séance du même jour et du même sport. Pour le fractionné, l'appli lit tes tours (laps) Garmin et ne garde que les fractions. Les activités hors plan comptent dans ton volume.</p></div>`;}
+ return `<div class="card"><h2>Garmin (via intervals.icu)</h2>
+  <div class="row"><span style="width:120px">Clé de l'appli</span><input type="password" id="appkey" value="${esc(ST.appKey||'')}" placeholder="ton APP_KEY Netlify" style="width:170px"><button class="btn sm" data-act="savekey">OK</button></div>
+  <div class="row" style="margin-top:10px"><button class="btn p" data-act="sync">Synchroniser</button></div>
+  <p class="note" id="svmsg">${esc(ST.svMsg||'Pas encore synchronisé.')}</p>
+  <p class="note">Tes activités Garmin arrivent toutes seules à chaque ouverture de l'appli : allure, vitesse, FC, dénivelé. Chaque activité est rangée sur la séance du même jour et du même sport. Pour le fractionné, seules les fractions (intervalles « WORK » détectés par intervals.icu) sont prises en compte. Les activités hors plan comptent dans ton volume.</p></div>`;}
 let ICSH=null,ICST=null;
 function hashStr(s){let h=0;for(let i=0;i<s.length;i++)h=(h*31+s.charCodeAt(i))|0;return h;}
 function pushCalendar(){if(!ST.appKey||typeof fetch==='undefined'||!/^https?:$/.test(location.protocol))return;clearTimeout(ICST);ICST=setTimeout(async()=>{

@@ -89,6 +89,8 @@ th{color:var(--mut);font-weight:600;font-size:12px;text-transform:uppercase}
 .adv{border-radius:12px;padding:10px 12px;margin-top:12px;font-size:14px;border:1px solid var(--line)}
 .adv.green{background:#14271b;border-color:#3f8f5a}.adv.orange{background:#2b2414;border-color:#d9a54a}.adv.red{background:#2c1717;border-color:#c25b5b}
 .badge.green{border-color:#3f8f5a;color:#8fe0a8}.badge.orange{border-color:#d9a54a;color:#ffcf73}.badge.red{border-color:#c25b5b;color:#ff9b9b}
+.fuel{background:#2a2412;border:1px solid #5c4a1c;border-radius:12px;padding:8px 10px;margin-top:10px;font-size:14px}
+.fuel b{color:#ffcf73}
 .spd{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:10px;background:var(--card2);border-radius:12px;padding:8px 10px}
 .spd .sl{font-size:13px;color:var(--mut);flex-basis:100%}
 .spd .pk{display:flex;align-items:center;gap:4px;flex:1}
@@ -614,7 +616,7 @@ function dayHtml(d,title,rt){
  const p=PLAN[key(d)],isT=key(d)===key(today()),wxs=rt&&diff(today(),d)>=0&&diff(today(),d)<=2;
  if(!p)return `<div class="day"><div class="dh"><b>${title||fd(d,{day:1})}</b></div><div class="empty">Hors plan.</div></div>`;
  const list=p.ses.length?p.ses.map((s,i)=>sesHtml(s,d,i)).join(''):'<div class="empty">Repos (ou séance de salle seulement).</div>';
- return `<div class="day${isT?' today':''}"><div class="dh"><b>${title||fd(d,{day:1})}</b>${wxs?wxLine(d):`<span class="note">${d<START?'avant le plan':''}</span>`}</div>${wxs?wxNotes(d):''}${list}${rt?routineHtml(d):''}</div>`;
+ return `<div class="day${isT?' today':''}"><div class="dh"><b>${title||fd(d,{day:1})}</b>${wxs?wxLine(d):`<span class="note">${d<START?'avant le plan':''}</span>`}</div>${wxs?wxNotes(d):''}${list}${p.ses.length?fuelBox(d):''}${rt?routineHtml(d):''}</div>`;
 }
 function weekHead(mon){
  const p=PLAN[key(mon)];if(!p)return '';const T=weekTotals(mon);
@@ -872,7 +874,7 @@ function vSettingsOld(){
 // Saisie des vitesses réalisées
 // ============================================================
 const RACEDIST=t=>/Marathon des Landes|^Marathon/.test(t)?42195:/Semi/.test(t)?21097.5:/10 km/.test(t)?10000:0;
-function goalSec(g){const s=parseTime(String(g||'').replace(/[<> ]/g,''));return s>0?s:NaN;}
+function goalSec(g){g=String(g||'').replace(/[<> ]/g,'');const h=g.match(/^(\d+)h(\d{1,2})?$/i);if(h)return (+h[1])*3600+(+(h[2]||0))*60;const s=parseTime(g);return s>0?s:NaN;}
 function sesKind(s){
  const sp=s.sp==='race'||s.sp==='test'?(s.ev?s.ev.sp:''):s.sp;
  if(sp==='run'){const t=s.t;
@@ -1124,6 +1126,47 @@ const EMO={run:'🏃',bike:'🚴',swim:'🏊',race:'🏁',test:'🧪',multi:'�
 function strip(h){return String(h).replace(/<[^>]+>/g,'').replace(/&amp;/g,'&').replace(/&lt;/g,'<').replace(/&gt;/g,'>').replace(/&quot;/g,'"');}
 function icsEsc(s){return String(s).replace(/\\/g,'\\\\').replace(/;/g,'\;').replace(/,/g,'\\,').replace(/\r?\n/g,'\\n');}
 function fold(line){const enc=new TextEncoder(),out=[];let cur='',n=0;for(const ch of line){const b=enc.encode(ch).length;if(n+b>(out.length?74:75)){out.push(cur);cur='';n=0;}cur+=ch;n+=b;}out.push(cur);return out.join('\r\n ');}
+// ============================================================
+// Nutrition automatique de la séance du jour
+// ============================================================
+function sesFuel(s,d){
+ if(['gym','rest','multi'].includes(s.sp)||s.ghost)return null;
+ const W=ST.weight||76,wx=wxFor(d),temp=wx?Math.round(wx.tmax):15;
+ // triathlons : consignes fixes
+ if(s.sp==='race'&&s.ev&&s.ev.sp==='tri'){
+  if(/IRONMAN/.test(s.t))return {need:1,line:"Vélo 80-90 g/h (1 prise toutes les 20'), course 50-60 g/h (gel tous les 2 ravitos)",pre:`J-2/J-1 : 8-10 g/kg/j de glucides · 3 h avant : ${Math.round(2.5*W)} g de glucides`,post:'Plan détaillé dans l\'onglet Jour J'};
+  if(/Half/.test(s.t))return {need:1,line:"Vélo 70-80 g/h (dès 15'), course 50-60 g/h (gel toutes les 25')",pre:`Veille riche en glucides · 3 h avant : ${Math.round(2*W)} g de glucides`,post:`Après : ${Math.round(1.2*W)} g de glucides + 25 g de protéines`};
+  return {need:1,line:"1 bidon de boisson sucrée sur le vélo + 1 gel 10' avant de poser le vélo. Rien d'autre.",pre:`3 h avant : ${Math.round(1.5*W)} g de glucides`,post:''};}
+ let sp=s.sp==='race'||s.sp==='test'?(s.ev?s.ev.sp:'run'):s.sp;if(!['run','bike','swim'].includes(sp))return null;
+ const kd=sesKind(s)||{sp,k:'ef'},v=kd?plannedVal(s,d,kd):null;
+ let T,dist,level,mode='train';
+ if(sp==='run'){
+  if(s.sp==='race'){dist=RACEDIST(s.t)/1000;const g=goalSec(s.ev.goal);T=g?g/60:dist*v/60;level=dist>30?3:dist>15?4:5;mode='race';}
+  else if(s.sp==='test'){T=45;dist=9;level=5;mode='race';}
+  else{T=s.km?s.km*v/60:(s.min||45);dist=s.km||T*60/v;level=kd.k==='vma'?5:kd.k==='seuil'?4:2;if(kd.k==='long'&&T>=90)mode='race';}
+ }else if(sp==='bike'){T=s.min||60;dist=(v||25)*T/60;level=/allure Ironman/.test(s.t)?3:/seuil|force|sweet|tempo/i.test(s.t)?4:2;}
+ else{T=swimMin(s,d);dist=(s.m||2000)/1000;level=/CSS|vitesse/.test(s.t)?4:2;}
+ const old=NC;let F;NC=Object.assign({},NC,{mode,temp,caf:1});
+ try{F=fuelPlan({W,sp,T,level,distKm:dist});}finally{NC=old;}
+ const it=F.items,unit=sp==='bike'?'prise':'gel';
+ let line;
+ if(F.rate&&!it.length){line='Pas besoin de manger pendant · rince-bouche sucré (gorgée recrachée) à mi-séance si tu veux un coup de boost';}
+ else if(!F.rate){line=T<45?'Rien à manger pendant':'Pas besoin de manger pendant';
+  if(F.fluid)line+=` · eau ${F.fluid>=500?F.fluid+' ml/h':'quelques gorgées'}`;else if(sp!=='swim')line+=' · eau si tu as soif';
+  if(mode==='race'&&level>=4&&T>=45)line+=' · rince-bouche sucré à mi-course';}
+ else{const iv=it[1]?it[1].t-it[0].t:null;
+  line=`${F.rate} g/h : ${it.length} ${unit}${it.length>1?'s':''}${it[0]?` — 1er à ${hm(it[0].t)}${iv?`, puis toutes les ${iv}'`:''}`:''} · ${F.fluid} ml/h${F.sodium?' + sel':''}`;
+  if(it.some(i=>/caféiné/.test(i.what)))line+=' · 1 caféiné';}
+ const pre=s.sp==='race'&&T>=60?`3 h avant : ${Math.round(2*W)} g de glucides`:T>=100?`2 h avant : petit-déj ${Math.round(1.2*W)} g de glucides`:T>=60&&level>=4?'1-2 h avant : collation glucidique (banane, tartine)':'';
+ const post=T>=90||level>=4?`Après : ${Math.round((T>=90?1:0.8)*W)} g de glucides + 25 g de protéines dans l'heure`:'';
+ return {need:!!F.rate,line,pre,post,T};}
+function dayFuel(d){const p=PLAN[key(d)];if(!p)return null;const L=[];
+ p.ses.forEach(s=>{const f=sesFuel(s,d);if(f)L.push({s,f});});if(!L.length)return null;
+ const main=L.slice().sort((a,b)=>(b.f.need-a.f.need)||((b.f.T||0)-(a.f.T||0)))[0];
+ const short=L.length===1?main.f.line:L.filter(x=>x.f.need).map(x=>`${x.s.t} : ${x.f.line}`).join(' · ')||'Rien à manger pendant les séances · eau suffit';
+ return {L,short,pre:main.f.pre,post:main.f.post};}
+function fuelBox(d){const F=dayFuel(d);if(!F)return '';
+ return `<div class="fuel"><b>🍌 Nutrition du jour</b>${F.L.map(x=>`<div>${F.L.length>1?`<span class="note">${esc(x.s.t)} :</span> `:''}${esc(x.f.line)}</div>`).join('')}${F.pre?`<div class="note">${esc(F.pre)}</div>`:''}${F.post?`<div class="note">${esc(F.post)}</div>`:''}</div>`;}
 function buildICS(){
  const L=['BEGIN:VCALENDAR','VERSION:2.0','PRODID:-//Cap Ironman 2028//FR','CALSCALE:GREGORIAN','METHOD:PUBLISH','X-WR-CALNAME:Cap Ironman 2028','X-WR-TIMEZONE:Europe/Paris','REFRESH-INTERVAL;VALUE=DURATION:PT6H','X-PUBLISHED-TTL:PT6H'];
  const stamp=new Date().toISOString().replace(/[-:]/g,'').replace(/\.\d+/,'');
@@ -1133,7 +1176,7 @@ function buildICS(){
   if(!title)title=p.ses.some(s=>s.sp==='rest')?'😴 '+p.ses[0].t:(gym.length?'💪 '+gym[0].t:'');
   else if(gym.length)title+=' · 💪';
   if(!title)return;
-  const desc=p.ses.map(s=>{const meta=s.sp==='swim'?`${s.m} m`:(s.min?hm(s.min):'');return `${EMO[s.sp]||'•'} ${s.t}${meta?' ('+meta+')':''}\n${strip(fill(s.x,p.d))}`;}).join('\n\n')+`\n\n${p.ph.n} · semaine ${p.k+1}/${p.n}${p.S?' · semaine école':''}`;
+  const desc=p.ses.map(s=>{const meta=s.sp==='swim'?`${s.m} m`:(s.min?hm(s.min):'');return `${EMO[s.sp]||'•'} ${s.t}${meta?' ('+meta+')':''}\n${strip(fill(s.x,p.d))}`;}).join('\n\n')+(()=>{const F=dayFuel(p.d);return F?`\n\n🍌 Nutrition\n${F.short}${F.pre?'\n'+F.pre:''}${F.post?'\n'+F.post:''}`:'';})()+`\n\n${p.ph.n} · semaine ${p.k+1}/${p.n}${p.S?' · semaine école':''}`;
   const d2=key(add(p.d,1)).replace(/-/g,'');
   L.push('BEGIN:VEVENT','UID:'+k+'@cap-ironman-2028','DTSTAMP:'+stamp,'DTSTART;VALUE=DATE:'+k.replace(/-/g,''),'DTEND;VALUE=DATE:'+d2,'SUMMARY:'+icsEsc(title.trim()),'DESCRIPTION:'+icsEsc(desc),'TRANSP:TRANSPARENT','END:VEVENT');});
  L.push('END:VCALENDAR');return L.map(fold).join('\r\n')+'\r\n';}

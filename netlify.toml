@@ -1,0 +1,7 @@
+[build]
+  publish = "."
+  command = "echo 'pas de build'"
+
+[functions]
+  directory = "netlify/functions"
+  node_bundler = "esbuild"

@@ -1245,6 +1245,9 @@ function workoutsFor(d){const p=PLAN[key(d)];if(!p)return [];const out=[];
   out.push({category:'WORKOUT',start_date_local:key(d)+'T00:00:00',type:{run:'Run',bike:'Ride',swim:'Swim'}[sp],name:s.t.replace(/[<>]/g,''),description:desc,external_id:`capironman-${key(d)}-${i}`});});
  return out;}
 let WOT=null;
+async function resendWorkouts(){if(!ST.appKey)return;const ids=ST.woIds||[];ST.woMsg='Renvoi en cours…';render();
+ try{if(ids.length)await fetch('/api/workouts',{method:'POST',headers:{'content-type':'application/json','x-app-key':ST.appKey},body:JSON.stringify({events:[],remove:ids})});}catch(e){}
+ ST.woH=null;ST.woIds=[];save();setTimeout(()=>{pushWorkouts();setTimeout(render,6000);},4000);}
 function pushWorkouts(){if(!ST.appKey||typeof fetch==='undefined'||!/^https?:$/.test(location.protocol))return;clearTimeout(WOT);WOT=setTimeout(async()=>{
  const t=today(),ev=[];for(let i=0;i<14;i++)ev.push(...workoutsFor(add(t,i)));
  const ids=ev.map(e=>e.external_id),h=hashStr(JSON.stringify(ev));if(h===ST.woH)return;
@@ -1418,6 +1421,7 @@ function stravaCard(){
   <div class="row" style="margin-top:10px"><button class="btn p" data-act="sync">Synchroniser</button></div>
   <p class="note" id="svmsg">${esc(ST.svMsg||'Pas encore synchronisé.')}</p>
   <p class="note">⌚ ${esc(ST.woMsg||'Séances vers la montre : envoi automatique à chaque ouverture.')}</p>
+  <div class="row"><button class="btn sm" data-act="resendwo">Renvoyer les séances à la montre</button></div>
   <p class="note">Tes activités Garmin arrivent toutes seules à chaque ouverture de l'appli : allure, vitesse, FC, dénivelé. Chaque activité est rangée sur la séance du même jour et du même sport. Pour le fractionné, seules les fractions (intervalles « WORK » détectés par intervals.icu) sont prises en compte. Les activités hors plan comptent dans ton volume.</p></div>`;}
 let ICSH=null,ICST=null;
 function hashStr(s){let h=0;for(let i=0;i<s.length;i++)h=(h*31+s.charCodeAt(i))|0;return h;}
@@ -1461,6 +1465,7 @@ function init(){
   if(a==='offend'){const k=key(today());ST.off=(ST.off||[]).map(o=>k>=o.from&&k<=o.to?Object.assign({},o,{to:key(add(today(),-1))}):o).filter(o=>o.to>=o.from);save();rebuild();return;}
   if(a==='savekey'){ST.appKey=document.getElementById('appkey').value.trim();ST.icsH=null;save();render();if(ST.appKey){pushCalendar();stravaSync(true);}return;}
   if(a==='sync'){stravaSync(true);return;}
+  if(a==='resendwo'){resendWorkouts();return;}
   if(a==='logdel'){delete ST.log[b.dataset.id];save();build();const y=window.scrollY;render();if(SHEET)renderSheet();window.scrollTo(0,y);return;}
   if(a==='ncses'){ncFromSession(b.dataset.id);return;}
   if(a==='ncsp'){NC.sp=b.dataset.v;NC.unit=NC.sp==='swim'?'p100':NC.sp==='bike'?'kmh':'pace';NC.speed=NC.sp==='swim'?'2:00':NC.sp==='bike'?'27':'5:30';NC.dist=NC.sp==='swim'?2000:NC.sp==='bike'?60:10;ncSave();render();return;}

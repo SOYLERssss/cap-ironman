@@ -330,15 +330,15 @@ const CSS_TEST="Échauf. 400 souple + 4×50 progressif. Puis 400 m à fond (note
 const FTP_TEST="20' en Z1-Z2 + 3×1' vite · 5' à fond · 10' souple · puis 20' le plus fort possible et régulier. FTP ≈ 95 % de la puissance moyenne des 20'. Sans capteur : note la FC moyenne et la vitesse sur un parcours plat repère. Entre ta FTP dans Réglages.";
 const EV=[
  {d:'2026-10-22',type:'test',sp:'run',t:'Test seuil 30 min',x:"Le test qui confirme ton seuil Garmin (4:35). 15' échauf. + 3 accélérations, puis 30' le plus vite possible en régulier, sur plat. Allure moyenne des 20 dernières minutes = ton seuil, FC moyenne des 20 dernières = ta FC seuil. Entre l'allure dans Objectifs : tout le plan se recale."},
- {d:'2026-11-02',type:'test',sp:'swim',t:'Test CSS natation',x:CSS_TEST},
+ {d:'2026-11-08',type:'test',sp:'swim',t:'Test CSS natation',x:CSS_TEST},
  {d:'2026-11-04',type:'test',sp:'bike',t:'Test FTP 20 min',x:FTP_TEST},
- {d:'2027-02-01',type:'test',sp:'swim',t:'Test CSS natation',x:CSS_TEST},
+ {d:'2027-01-31',type:'test',sp:'swim',t:'Test CSS natation',x:CSS_TEST},
  {d:'2027-02-10',type:'test',sp:'bike',t:'Test FTP 20 min',x:FTP_TEST},
  {d:'2027-02-07',type:'race',sp:'run',t:'Semi-marathon',goal:'1h40',place:'Semi local ou parcours plat mesuré',
   x:"Objectif 1h40 (4:44/km). Km 1-3 à 4:48, puis 4:44, les 5 derniers km à fond. Gel au km 8 et 15."},
  {d:'2027-03-07',type:'race',sp:'run',t:'10 km',goal:'44:00',place:'10 km local ou parcours plat mesuré',
   x:"Objectif 44:00 (4:24/km). Échauf. 20' + 4 accélérations. Pars à 4:26, régulier jusqu'au km 7, puis tout ce qui reste. Entre ton chrono dans Objectifs."},
- {d:'2027-04-26',type:'test',sp:'swim',t:'Test CSS natation',x:CSS_TEST},
+ {d:'2027-04-25',type:'test',sp:'swim',t:'Test CSS natation',x:CSS_TEST},
  {d:'2027-05-16',type:'race',sp:'tri',t:'BIGorre Man · Triathlon M',goal:'< 2h35',place:'Coussan (65) · date à confirmer (mai 2027)',
   x:"1,5 km / 40 km / 10 km. Objectif < 2h35 : nage ~30', vélo ~1h18 en Z3 sans exploser dans les coteaux, course ~43'. Premier triathlon M : priorité aux transitions propres."},
  {d:'2027-05-23',type:'test',sp:'bike',t:'Test FTP 20 min',x:FTP_TEST},
@@ -347,7 +347,7 @@ const EV=[
  {d:'2027-07-11',type:'race',sp:'run',t:'10 km · Course du Moun',goal:'43:30',place:'Mont-de-Marsan · date à confirmer (juillet 2027)',
   x:"Objectif 43:30 (4:21/km). Pars à 4:23, accélère au km 6."},
  {d:'2027-08-25',type:'test',sp:'bike',t:'Test FTP 20 min',x:FTP_TEST},
- {d:'2027-08-30',type:'test',sp:'swim',t:'Test CSS natation',x:CSS_TEST},
+ {d:'2027-08-29',type:'test',sp:'swim',t:'Test CSS natation',x:CSS_TEST},
  {d:'2027-09-19',type:'race',sp:'run',t:'Semi-marathon test',goal:'1h36',place:'Semi local ou test sur parcours plat',
   x:"Objectif 1h36 (4:33/km). C'est le test qui fixe l'allure marathon : moins de 1h37 → vise 3h25 (4:52/km) ; 1h37 à 1h40 → 3h30 (4:58/km) ; au-delà → 3h35."},
  {d:'2027-10-10',type:'race',sp:'run',t:'Marathon des Landes',goal:'3h25',place:'Mont-de-Marsan · date estimée (2026 : 11 oct.)',big:1,
@@ -358,7 +358,7 @@ const EV=[
   x:"Objectif 1h34 (4:27/km). Km 1-3 à 4:31, puis 4:27, les 5 derniers km à fond. Gel au km 8 et 15."},
  {d:'2028-03-12',type:'race',sp:'run',t:'10 km test',goal:'42:30',place:'10 km local ou parcours mesuré',
   x:"Objectif 42:30 (4:15/km). Pars à 4:17, régulier jusqu'au km 7, puis tout ce qui reste."},
- {d:'2028-04-10',type:'test',sp:'swim',t:'Test CSS natation',x:CSS_TEST},
+ {d:'2028-04-09',type:'test',sp:'swim',t:'Test CSS natation',x:CSS_TEST},
  {d:'2028-04-12',type:'test',sp:'bike',t:'Test FTP 20 min',x:FTP_TEST},
  {d:'2028-05-07',type:'race',sp:'tri',t:'Half test (1,9 / 90 / 21,1)',goal:'< 5h15',place:'Triathlon L de la région ou simulation',big:1,
   x:"Répétition générale : vélo en {ZIM} haut de fourchette, course à {IM} puis {M} sur les 5 derniers km. Teste combinaison, nutrition (80-90 g/h), matériel."},
@@ -558,6 +558,14 @@ function weekTpl(ph,k,n,S,rec,race){
  const sat=W[5];W[5]=W[6];W[6]=sat;
  const km=kmFor(ph,k,n,rec);
  W[5]=W[5].map(z=>z.lx!==undefined?longRunKm(km,z.lx):z).filter(z=>!(z.t==='Sortie longue'&&z.km===0));
+ // natation uniquement le week-end : les nages de semaine sont regroupées samedi/dimanche
+ {const KEEP={css:5,vit:4,im:4,ow:4,end:3,tech:2,recup:1};
+  const wk=[];for(let i=0;i<5;i++){W[i].forEach(z=>{if(z.sp==='swim')wk.push(z);});W[i]=W[i].filter(z=>z.sp!=='swim');}
+  if(wk.length){const srt=wk.sort((a,b)=>(KEEP[b.kind]||0)-(KEEP[a.kind]||0)),rest=srt.slice(1).reduce((t,z)=>t+(z.m||0),0);
+   const best=swimS(srt[0].kind,Math.min(3500,(srt[0].m||2000)+0.5*rest));
+   if(!W[5].some(z=>z.sp==='swim'))W[5].push(best);
+   else if(!W[6].some(z=>z.sp==='swim'))W[6].unshift(best);
+   else{const j=W[6].findIndex(z=>z.sp==='swim');if((KEEP[best.kind]||0)>(KEEP[W[6][j].kind]||0))W[6][j]=best;}}}
  // semaine avec course le dimanche : on allège
  if(race&&!['mara','build','taper'].includes(ph.k)){
   W[3]=W[3].map(s=>s.sp==='run'?EF(35,' + 4 accélérations de 20 s'):s);
@@ -626,12 +634,16 @@ function weekTotals(mon){let r=0,b=0,sw=0,swm=0,n=0,dn=0;
 
 // ---------- Rendu ----------
 const SPN={run:'Course',swim:'Natation',bike:'Vélo',gym:'Salle',rest:'Repos',race:'Objectif',test:'Test',multi:'Veille'};
+const GROUPS=['Pecs','Dos','Bras','Jambes','Épaules'];
+function gymPick(s,d,id){const g=(ST.gymLog||{})[key(d)];
+ return `<div class="spd"><span class="sl">Qu'est-ce que tu as travaillé ?</span><div class="row" style="gap:6px">${GROUPS.map(x=>`<button class="sg${g&&g.includes(x)?' on':''}" style="flex:none;padding:7px 12px" data-act="gympick" data-id="${id}" data-v="${x}">${x}</button>`).join('')}</div></div>`;}
 function sesHtml(s,d,i){
  const id=key(d)+'-'+i,done=!!ST.done[id];
+ if(s.sp==='gym'){const g=(ST.gymLog||{})[key(d)];if(g&&g.length)s={...s,t:'Salle · '+g.join(' + ')+(s.t.replace(/^Salle · \S+/,'')||'')};}
  const meta=s.sp==='swim'?`${s.m} m · ~${swimMin(s,d)}'`:(s.min?hm(s.min):'');
  const ck=s.sp==='rest'?'':`<label class="ck"><input type="checkbox" data-id="${id}" ${done?'checked':''}><span></span></label>`;
  const extra=s.ev&&s.ev.place?`<div class="note">${esc(s.ev.place)}${s.ev.goal?' · objectif '+esc(s.ev.goal):''}</div>`:'';
- return `<div class="ses ${s.sp}${done?' done':''}">${ck}<div class="sb"><div class="sh"><span class="tg">${SPN[s.sp]}</span>${meta?`<span>${meta}</span>`:''}</div><div class="st">${esc(s.t)}</div>${extra}<div class="sx">${fill(s.x,d)}</div>${spdHtml(s,d,id)}${sesKind(s)&&((s.min||0)>=60||s.sp==='race'||(s.m||0)>=2500)?`<button class="lnk" data-act="ncses" data-id="${id}">Calculer la nutrition de cette séance →</button>`:''}</div></div>`;
+ return `<div class="ses ${s.sp}${done?' done':''}">${ck}<div class="sb"><div class="sh"><span class="tg">${SPN[s.sp]}</span>${meta?`<span>${meta}</span>`:''}</div><div class="st">${esc(s.t)}</div>${extra}<div class="sx">${fill(s.x,d)}</div>${s.sp==='gym'?gymPick(s,d,id):''}${spdHtml(s,d,id)}${sesKind(s)&&((s.min||0)>=60||s.sp==='race'||(s.m||0)>=2500)?`<button class="lnk" data-act="ncses" data-id="${id}">Calculer la nutrition de cette séance →</button>`:''}</div></div>`;
 }
 function dayHtml(d,title,rt){
  const p=PLAN[key(d)],isT=key(d)===key(today()),wxs=rt&&diff(today(),d)>=0&&diff(today(),d)<=2;
@@ -1392,7 +1404,9 @@ function weatherBike(){
  }}
 const HARD=/VMA|Seuil|Tempo|Allure|Fartlek|Côtes|Test seuil/;
 function adaptToday(){
- const k=key(today()),p=PLAN[k],st=wellStatus(k);if(!p||!st||st.c==='green')return;
+ const k=key(today()),p=PLAN[k],st=wellStatus(k);
+ const yl=(ST.gymLog||{})[key(add(today(),-1))];
+ if(p&&yl&&yl.includes('Jambes'))p.ses=p.ses.map(s=>s.sp==='run'&&(s.q||HARD.test(s.t))?{...s,x:'🦵 Jambes travaillées hier à la salle : échauffement +5\', et si elles sont lourdes, fais la version allégée (1 répétition sur 4 en moins). '+s.x}:s);if(!p||!st||st.c==='green')return;
  const note=t=>`⚠ Adapté à ta forme (${st.s}/100) · prévu : ${t}. `;
  p.ses=p.ses.map(s=>{
   if(s.sp==='test'&&s.ev&&s.ev.sp==='run'&&st.c==='red')return {...s,adj:1,x:`⚠ Forme basse (${st.s}/100) : reporte ce test à un jour où tu te sens bien, sinon le résultat sous-estimera ton niveau. En attendant, 35' très facile. `+s.x};
@@ -1613,6 +1627,8 @@ function init(){
   if(a==='recw'){const wk=wkKey(monday(today()));ST.recW=ST.recW||{};if(ST.recW[wk])delete ST.recW[wk];else ST.recW[wk]=1;save();rebuild();return;}
   if(a==='off'){const n=+document.getElementById('offn').value;ST.off=ST.off||[];ST.off.push({type:b.dataset.v,from:key(today()),to:key(add(today(),n-1))});
    if(b.dataset.v==='sick'||n>=5){ST.recW=ST.recW||{};ST.recW[wkKey(monday(add(today(),n)))]=1;}save();rebuild();return;}
+  if(a==='gympick'){ST.gymLog=ST.gymLog||{};const k=b.dataset.id.slice(0,10),v=b.dataset.v;let g=ST.gymLog[k]||[];g=g.includes(v)?g.filter(x=>x!==v):g.concat(v);
+   if(g.length){ST.gymLog[k]=g;ST.done[b.dataset.id]=1;}else{delete ST.gymLog[k];delete ST.done[b.dataset.id];}save();build();const y=window.scrollY;render();if(SHEET)renderSheet();window.scrollTo(0,y);return;}
   if(a==='skipday'){ST.off=ST.off||[];const k=key(today());ST.off=ST.off.filter(o=>!(o.type==='skip'&&o.from===k));ST.off.push({type:'skip',from:k,to:k});save();rebuild();return;}
   if(a==='offend'){const k=key(today());ST.off=(ST.off||[]).map(o=>k>=o.from&&k<=o.to?Object.assign({},o,{to:key(add(today(),-1))}):o).filter(o=>o.to>=o.from);save();rebuild();return;}
   if(a==='savekey'){ST.appKey=document.getElementById('appkey').value.trim();ST.icsH=null;save();render();if(ST.appKey){pushCalendar();stravaSync(true);}return;}

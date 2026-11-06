@@ -253,16 +253,16 @@ function fill(x,d){if(!x)return '';const {p,c}=ctx(d);
 function run(t,min,x,q){return {sp:'run',t,min:Math.round(min),x,q:!!q};}
 function EF(min,extra){min=Math.round(min);return run('Endurance fondamentale',min,`${min}' en aisance à {E}${extra||''}. Tu dois pouvoir parler.`);}
 function longRun(min,extra){const s=run('Sortie longue',min,'',1);s.lx=extra||'';return s;}
-function longRunKm(km,extra){const s=run('Sortie longue',km*6,`${km} km à {E} (≈ {lt${km}})${extra||''}. Pars 15 s/km plus lent les 3 premiers km. Eau + 1 gel toutes les 40'.`,1);s.km=km;return s;}
+function longRunKm(km,extra){const s=run('Sortie longue',km*6,`${km} km à {E} (≈ {lt${km}})${extra||''}. Pars 15 s/km plus lent les 3 premiers km. Ravitaillement : voir l'encadré 🍌 Nutrition du jour.`,1);s.km=km;return s;}
 // distance de la sortie longue du samedi : 20 km minimum
-const LRKM={fond:[20,22],reprise:[14,20],v10:[22,24],semi:[21,24],ete:[20,22],trans:[20,20],hiver:[20,24]};
+const LRKM={fond:[30,32],reprise:[30,32],v10:[30,34],semi:[30,32],ete:[30,32],trans:[30,30],hiver:[30,34]};
 function kmFor(ph,k,n,rec){
- if(ph.k==='build')return [20,22,24,20,25,26,20,0,20,22,28][k];
- if(ph.k==='reprise')return [14,16,18,20,20][k]||20;
- if(ph.k==='taper')return [22,20,0][k];
+ if(ph.k==='build')return [30,30,32,30,32,34,30,0,30,30,32][k];
+ if(ph.k==='reprise')return [14,42,30,30,32][k]||30;
+ if(ph.k==='taper')return [26,20,0][k];
  if(ph.k==='trans'&&k===0)return 0;
- if(rec)return 20;
- const a=LRKM[ph.k];if(!a)return 20;const t=n>1?k/(n-1):1;return Math.round(a[0]+(a[1]-a[0])*t);}
+ if(rec)return 30;
+ const a=LRKM[ph.k];if(!a)return 30;const t=n>1?k/(n-1):1;return Math.round(a[0]+(a[1]-a[0])*t);}
 function brick(min){return run('Enchaînement (brick)',min,`Dès la descente du vélo : ${min}' à {IM}, les 5 dernières minutes vers {M}. Transition rapide, foulée courte.`);}
 function swimS(kind,m){
  m=Math.max(1000,Math.round(m/100)*100);const body=m-900;let t,x;
@@ -298,7 +298,7 @@ const PH=[
  {k:'fond',n:'Vitesse & seuil',col:'#fc6b3f',s:'2026-10-19',e:'2026-10-25',lr:[60,95],br:[60,150],sw:[1800,2600],legs:'force',
   obj:"3 séances d'intensité par semaine (VMA, tempo, seuil) + sortie longue le samedi."},
  {k:'reprise',n:'Reprise',col:'#7dd3c0',s:'2026-10-26',e:'2026-11-29',legs:'anat',
-  obj:"Reprise progressive après 2 semaines sans entraînement : 2 séances de qualité + 1 footing par semaine, sortie longue 14 → 20 km. On ne rattrape pas les séances manquées, on reconstruit."},
+  obj:"Reprise progressive après 2 semaines sans entraînement : 2 séances de qualité + 1 footing par semaine, sortie longue de 30 km minimum (42 km le 7 novembre). On ne rattrape pas les séances manquées, on reconstruit."},
  {k:'fond',n:'Vitesse & seuil',col:'#fc6b3f',s:'2026-11-30',e:'2026-12-20',lr:[80,95],br:[120,150],sw:[2400,2600],legs:'force',
   obj:"3 séances d'intensité par semaine (VMA, tempo, seuil) + sortie longue le samedi."},
  {k:'v10',n:'Spécifique semi & 10 km',col:'#ff8fb1',s:'2026-12-21',e:'2027-03-07',lr:[80,100],br:[120,165],sw:[2400,3000],legs:'force',
@@ -330,7 +330,7 @@ const CSS_TEST="Échauf. 400 souple + 4×50 progressif. Puis 400 m à fond (note
 const FTP_TEST="20' en Z1-Z2 + 3×1' vite · 5' à fond · 10' souple · puis 20' le plus fort possible et régulier. FTP ≈ 95 % de la puissance moyenne des 20'. Sans capteur : note la FC moyenne et la vitesse sur un parcours plat repère. Entre ta FTP dans Réglages.";
 const EV=[
  {d:'2026-10-22',type:'test',sp:'run',t:'Test seuil 30 min',x:"Le test qui confirme ton seuil Garmin (4:35). 15' échauf. + 3 accélérations, puis 30' le plus vite possible en régulier, sur plat. Allure moyenne des 20 dernières minutes = ton seuil, FC moyenne des 20 dernières = ta FC seuil. Entre l'allure dans Objectifs : tout le plan se recale."},
- {d:'2026-11-08',type:'test',sp:'swim',t:'Test CSS natation',x:CSS_TEST},
+ {d:'2026-11-15',type:'test',sp:'swim',t:'Test CSS natation',x:CSS_TEST},
  {d:'2026-11-04',type:'test',sp:'bike',t:'Test FTP 20 min',x:FTP_TEST},
  {d:'2027-01-31',type:'test',sp:'swim',t:'Test CSS natation',x:CSS_TEST},
  {d:'2027-02-10',type:'test',sp:'bike',t:'Test FTP 20 min',x:FTP_TEST},
@@ -393,8 +393,9 @@ function weekTpl(ph,k,n,S,rec,race){
    run('Seuil',50,"15' échauf. + 3×8' à {T} r2' + 10'",1),
    run('Seuil long',55,"15' échauf. + 2×12' à {T} r3' + 10'",1),
    run('Tempo progressif',55,"15' échauf. + 30' progressif de {M} à {T} + 10'",1)][k]);
-  W[6].push(longRun(0,k>=3?", dont les 3 derniers km à {M}":''));
-  if(S){W[5].push(swimS(k%2?'end':'tech',sw),bikeS('z2',br));}
+  W[6].push(longRun(0,k===1?". Distance marathon : allure très facile (plus lent que la fourchette si besoin), marche 1' tous les 5 km autorisée, 60-70 g de glucides/h dès la 30e minute. Arrête-toi net à la moindre douleur qui change ta foulée":k>=3?", dont les 3 derniers km à {M}":''));
+  if(k===1){W[5].push(swimS('recup',1500),bikeS('easy',45," Lendemain de 42 km : seulement si les jambes vont bien, sinon repos complet."));}
+  else if(S){W[5].push(swimS(k%2?'end':'tech',sw),bikeS('z2',br));}
   else{W[0].push(swimS('tech',sw*.9));W[4].push(swimS(k%2?'css':'end',sw));W[5].push(bikeS('z2',br));}
   break;}
  case 'fond':{const lr=I(ph.lr),br=I(ph.br),sw=I(ph.sw);
@@ -459,7 +460,7 @@ function weekTpl(ph,k,n,S,rec,race){
   else{W[0].push(swimS('css',sw*.9));W[2].push(bikeS(rec?'easy':(k%2?'ss':'seuil'),90*f));W[4].push(swimS('vit',sw*.8),EF(30));W[5].push(bikeS(rec?'z2':'im',br));if(!rec)W[5].push(brick(20));W[6].push(swimS('ow',2000));}
   break;}
  case 'mara':{
-  const LK=[20,22,24,20,24,26,28,20,0,32,22,0],MK=[6,7,8,0,10,11,12,0,0,14,10,0];
+  const LK=[30,30,32,30,32,32,34,30,0,34,24,0],MK=[6,7,8,0,10,11,12,0,0,14,10,0];
   const LX=['','','','',' dont 2×5 km à {M} (r1 km EF)',' dont 3×4 km à {M}',' dont les 10 derniers km à {M}','','',' dont 3×5 km à {M} (r1 km EF)',' dont 8 km à {M}',''];
   const lk=LK[k],mk=MK[k];
   if(k<11){
